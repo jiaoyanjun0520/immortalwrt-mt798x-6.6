@@ -25,7 +25,6 @@ jobs:
           'CONFIG_TARGET_PER_DEVICE_ROOTFS=y' \
           'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_ruijie_rg-x60-pro-107m=y' \
           'CONFIG_PACKAGE_luci-i18n-base-zh-cn=y' \
-          'CONFIG_PACKAGE_luci-app-turboacc=y' \
           'CONFIG_PACKAGE_luci-app-upnp=y' \
           'CONFIG_PACKAGE_luci-i18n-upnp-zh-cn=y' \
           'CONFIG_PACKAGE_luci-app-ddns=y' \
@@ -34,7 +33,7 @@ jobs:
           'CONFIG_PACKAGE_luci-i18n-sqm-zh-cn=y' > .config
           make defconfig
           echo "=====CHECK====="
-          grep -E "ruijie|turboacc|upnp|ddns|sqm|base-zh" .config | grep "=y" || true
+          grep -E "ruijie|upnp|ddns|sqm|base-zh" .config | grep "=y" || true
       - name: Download
         run: make download -j$(nproc)
       - name: Build
