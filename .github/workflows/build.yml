@@ -4,6 +4,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -12,16 +13,21 @@ jobs:
       - name: InstallDeps
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            bc bison build-essential ccache clang cpio curl device-tree-compiler \
-            flex g++ g++-multilib gawk gcc gcc-multilib git git-lfs gnupg gettext \
-            libelf-dev libncurses-dev libssl-dev python3 python3-distutils \
-            python3-pyelftools python3-setuptools rsync swig texinfo unzip wget \
-            xsltproc zlib1g-dev zstd file
+          sudo apt-get install -y \
+            ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk \
+            gettext gcc-multilib g++-multilib git git-lfs gnupg gperf haveged help2man \
+            intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libgnutls28-dev libglib2.0-dev \
+            libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev \
+            libreadline-dev libssl-dev libtool libyaml-dev lld llvm lrzsz genisoimage msmtp \
+            nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply \
+            python3-docutils python3-pyelftools python3-distutils python3-setuptools \
+            qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs \
+            upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd file xsltproc ca-certificates bc
 
       - name: Feeds
         run: |
-          ./scripts/feeds update -a
+          ./scripts/feeds update -a || { sleep 8; ./scripts/feeds update -a; }
           ./scripts/feeds install -a
 
       - name: Config
@@ -38,27 +44,43 @@ jobs:
           'CONFIG_PACKAGE_luci-app-ddns=y' \
           'CONFIG_PACKAGE_luci-i18n-ddns-zh-cn=y' \
           'CONFIG_PACKAGE_luci-app-sqm=y' \
-          'CONFIG_PACKAGE_luci-i18n-sqm-zh-cn=y' > .config
+          'CONFIG_PACKAGE_luci-i18n-sqm-zh-cn=y' \
+          'CONFIG_PACKAGE_etherwake=y' \
+          'CONFIG_PACKAGE_luci-app-wol=y' \
+          'CONFIG_PACKAGE_luci-i18n-wol-zh-cn=y' \
+          'CONFIG_PACKAGE_nlbwmon=y' \
+          'CONFIG_PACKAGE_luci-app-nlbwmon=y' \
+          'CONFIG_PACKAGE_luci-i18n-nlbwmon-zh-cn=y' \
+          'CONFIG_PACKAGE_tailscale=y' \
+          'CONFIG_PACKAGE_kmod-tun=y' > .config
           make defconfig
-          echo "=====CHECK====="
-          grep -E "ruijie|upnp|ddns|sqm|base-zh" .config | grep "=y" || true
+          echo "=====CHECK TARGET====="
+          grep -E 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_ruijie_rg-x60-pro-107m|ruijie_rg-x60' .config
+          grep -q 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_ruijie_rg-x60-pro-107m=y' .config \
+            || { echo '!!! 目标机型未被选中，终止'; exit 1; }
+          echo "=====CHECK PACKAGES====="
+          grep -E 'upnp|ddns|sqm|wol|nlbwmon|tailscale|base-zh' .config | grep '=y' || true
 
       - name: Download
-        run: make download -j$(nproc)
+        run: |
+          make download -j$(nproc) || make download -j$(nproc) || make download -j1 V=s
 
       - name: Build
         run: |
           set -o pipefail
-          make -j$(nproc) 2>&1 | tee build-full.log || {
-            echo "========== ERROR SUMMARY BEGIN =========="
-            grep -nE "Error|error:|No such file|cannot find|undefined reference|recipe for target" build-full.log | tail -n 80 || true
-            echo "========== ERROR SUMMARY END =========="
+          if ! make -j$(nproc) 2>&1 | tee build-full.log; then
+            echo "========== 串行重编以定位精确错误 BEGIN =========="
+            make -j1 V=s 2>&1 | tee -a build-full.log | tail -n 150
+            echo "========== 串行重编 END =========="
             exit 1
-          }
+          fi
 
       - name: List
         if: success()
-        run: find bin/targets -iname "*x60-pro-107m*" | sort
+        run: |
+          echo "===== 固件清单 ====="
+          find bin/targets -iname "*x60-pro-107m*" | sort
+          ls -lh bin/targets/mediatek/filogic/ 2>/dev/null || true
 
       - name: Upload firmware
         if: success()
