@@ -8,21 +8,22 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: openwrt-24.10-6.6
+
       - name: InstallDeps
         run: |
           sudo apt-get update
-          sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-            bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib \
-            g++-multilib git gnutls-dev gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev \
-            libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libreadline-dev libssl-dev libtool \
-            libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf \
-            python3 python3-pip python3-ply python3-pyelftools python3-distutils python3-setuptools qemu-utils \
-            re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd \
-            zlib1g-dev zstd bc file xsltproc
+          sudo apt-get install -y --no-install-recommends \
+            bc bison build-essential ccache clang cpio curl device-tree-compiler \
+            flex g++ g++-multilib gawk gcc gcc-multilib git git-lfs gnupg gettext \
+            libelf-dev libncurses-dev libssl-dev python3 python3-distutils \
+            python3-pyelftools python3-setuptools rsync swig texinfo unzip wget \
+            xsltproc zlib1g-dev zstd file
+
       - name: Feeds
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a
+
       - name: Config
         run: |
           printf '%s\n' \
@@ -41,19 +42,32 @@ jobs:
           make defconfig
           echo "=====CHECK====="
           grep -E "ruijie|upnp|ddns|sqm|base-zh" .config | grep "=y" || true
+
       - name: Download
         run: make download -j$(nproc)
+
       - name: Build
         run: |
           set -o pipefail
           make -j$(nproc) 2>&1 | tee build-full.log || {
-            echo "==================== 错误摘要 BEGIN ===================="
-            grep -nE "error:|Error [0-9]+|No rule to make|fatal error|command not found|FAILED" build-full.log | tail -n 80 || true
-            echo "==================== 错误摘要 END ===================="
+            echo "========== ERROR SUMMARY BEGIN =========="
+            grep -nE "Error|error:|No such file|cannot find|undefined reference|recipe for target" build-full.log | tail -n 80 || true
+            echo "========== ERROR SUMMARY END =========="
             exit 1
           }
+
       - name: List
+        if: success()
         run: find bin/targets -iname "*x60-pro-107m*" | sort
+
+      - name: Upload firmware
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x60pro-107m
+          path: bin/targets/mediatek/
+          if-no-files-found: error
+
       - name: Upload build log on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -61,8 +75,3 @@ jobs:
           name: build-full-log
           path: build-full.log
           if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
-        with:
-          name: x60pro-107m
-          path: bin/targets/mediatek/
-          if-no-files-found: error
